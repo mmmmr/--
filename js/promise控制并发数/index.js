@@ -20,31 +20,56 @@ const tasks = new Array(10).fill(0).map((v, i) => {
 // })
 
 // 并发控制函数 https://juejin.cn/post/7235574844435431461
-function concurrencyControl(tasks, limit, cb) {
-  const queue = tasks.slice();
-  let count = 0
+// function concurrencyControl(tasks, limit, cb) {
+//   const queue = tasks.slice();
+//   let count = 0
 
-  const runTask = async () => {
-    while (limit) {
-      limit--
-      if (!queue.length) {
-        break
-      }
-      const task = queue.shift()
-      const result = await task()
-      count++
-      limit++
-      if (count === tasks.length) {
-        cb(result)
-        break
-      }
-      runTask()
-    }
-  }
-  return runTask
-}
-concurrencyControl(tasks, 10, (taskId) => {
-  console.log(`task ${taskId} finish！`)
-})()
+//   const runTask = () => {
+//     while (limit) {
+//       limit--
+//       if (!queue.length) {
+//         break
+//       }
+//       const task = queue.shift()
+//       task().then(result => {
+//         count++
+//         limit++
+//         if (count === tasks.length) {
+//           cb(result)
+//         } else {
+//           runTask()
+//         }
+//       })
+//     }
+//   }
+//   return runTask
+// }
 
 // todo 使用 primose.race
+
+async function concurrencyControl(tasks, limit, cb) {
+  let activeList = []
+  const allTaskList = []
+
+  for (let i = 0; i < tasks.length; i++) {
+    const task = tasks[i]();
+    task.then(res => {
+      // activeList.splice(i, 1); 顺序都乱了我竟然还用下标
+      activeList = activeList.filter(it => it !== task)
+    })
+    activeList.push(task);
+    allTaskList.push(task)
+
+    if (activeList.length >= limit) {
+      await Promise.race(activeList).catch(err => err)
+    }
+  }
+
+  Promise.all(activeList).then(result => {
+    cb(result)
+  })
+}
+
+concurrencyControl(tasks, 3, (taskId) => {
+  console.log(`task ${taskId} finish！`)
+})
